@@ -47,6 +47,15 @@ data_transform = transforms.Compose([
     transforms.ToTensor() # this also converts all pixel values from 0 to 255 to be between 0.0 and 1.0
 ])
 
+imgTrs2 = ColorTransWithFlip()
+data_transform2 = transforms.Compose([
+    transforms.Lambda(lambda img:imgTrs2.lab2rgb(img)),
+    # Resize the images to 224*224
+    transforms.Resize(size=(224, 224)),
+           # Turn the image into a torch.Tensor
+    transforms.ToTensor() # this also converts all pixel values from 0 to 255 to be between 0.0 and 1.0
+])
+
 import glob
 from PIL import Image
 class AntBeeImgTrainDataSet(Dataset):
@@ -111,6 +120,19 @@ loader = torch.utils.data.DataLoader(dataset = trainDataSet,
                                      batch_size = 32,
                                      shuffle = True)
 testLoader = torch.utils.data.DataLoader(dataset = testDataSet,
+                                     batch_size = 32,
+                                     shuffle = True)
+									 
+									 
+trainDataSet2 = AntBeeImgTrainDataSet(data_transform2)
+print(trainDataSet2)
+testDataSet2 = AntBeeImgValDataSet(data_transform2)
+print(testDataSet2)
+
+loader2 = torch.utils.data.DataLoader(dataset = trainDataSet2,
+                                     batch_size = 32,
+                                     shuffle = True)
+testLoader2 = torch.utils.data.DataLoader(dataset = testDataSet2,
                                      batch_size = 32,
                                      shuffle = True)
 
@@ -195,6 +217,40 @@ for epoch in range(1, n_epochs+1):
         train_loss
         ))
 
+
+
+for epoch in range(1, n_epochs+1):
+    # monitor training loss
+    train_loss = 0.0
+
+    ###################
+    # train the model #
+    ###################
+    for data in loader2:
+        # _ stands in for labels, here
+        # no need to flatten images
+        images, _ = data
+        # clear the gradients of all optimized variables
+        optimizer.zero_grad()
+        # forward pass: compute predicted outputs by passing inputs to the model
+        outputs = model(images)
+        # calculate the loss
+        loss = criterion(outputs, images)
+        # backward pass: compute gradient of the loss with respect to model parameters
+        loss.backward()
+        # perform a single optimization step (parameter update)
+        optimizer.step()
+        # update running training loss
+        train_loss += loss.item()*images.size(0)
+
+    # print avg training statistics
+    train_loss = train_loss/len(loader2)
+    print('Epoch: {} \tTraining Loss: {:.6f}'.format(
+        epoch,
+        train_loss
+        ))
+		
+//rewrite below part for generating metrices for loader2 as well
 from ignite.engine import *
 from ignite.handlers import *
 from ignite.metrics import *
@@ -289,6 +345,25 @@ pip install pytorch-ignite
 pip install Pillow
 
 from PIL import ImageCms
+
+
+class ColorTransWithFlip:
+
+    '''Class for transforming RGB<->LAB color spaces for PIL images.'''
+
+    def __init__(self):
+      self.srgb_p = ImageCms.createProfile("sRGB")
+      self.lab_p  = ImageCms.createProfile("LAB")
+      self.rgb2lab_trans = ImageCms.buildTransformFromOpenProfiles(self.srgb_p, self.lab_p, "RGB", "LAB")
+      self.lab2rgb_trans = ImageCms.buildTransformFromOpenProfiles(self.lab_p, self.srgb_p, "LAB", "RGB")
+
+    def rgb2lab(self,img):
+
+        return ImageCms.applyTransform(img, self.rgb2lab_trans)
+
+    def lab2rgb(self,img):
+        toflipImg = ImageCms.applyTransform(img, self.lab2rgb_trans)
+        return transforms.functional.hflip(img)
 
 class ColorTrans:
 
